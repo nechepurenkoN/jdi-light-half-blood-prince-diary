@@ -156,8 +156,8 @@ Material UI:
 
 TODO
 
-Перечитайте [**
-гайд**](https://epam-my.sharepoint.com/:w:/p/evgenii_liashenko/Ef5Y3JcicTlPtMmtHg_19T8BLDZqSkBEa7oOgyDxq_hgUA?e=TUcIPI)
+Перечитайте 
+[**гайд**](https://epam-my.sharepoint.com/:w:/p/evgenii_liashenko/Ef5Y3JcicTlPtMmtHg_19T8BLDZqSkBEa7oOgyDxq_hgUA?e=TUcIPI)
 для новоприбывших коллег. Пока он не полностью сюда перенесен.
 
 ## Реализация кастомных элементов
@@ -274,28 +274,213 @@ public interface HasAssert<A> {
 }
 ```
 
+#### Другие интерфейсы
+На диаграмме представлен список интерфейсов, которые имплементирует `UIElement`.
+Эти методы позволяет расширить базовый функционал `WebElement`, например,
+кликнуть по определенной области, получить текст внутри, установить значение.
+
 #### Класс UIElement
-ы
+Реализует несколько конструкторов, проксирует методы `WebElement`,
+добавляет специфичные методы, вроде `dragAndDropTo`, позволяет искать элементы внутри себя,
+получать атрибуты, css-стили, выполнять различные проверки.
+
+Многофункциональный класс, возможности которого покрывают большинство задач автоматизации.
 
 
 ### Обзор UIBaseElement и прикладных классов
 
+**Q. Если `UIElement` такой мощный, почему я не могу наследовать его для своих элементов?**
+
+**A. Для реализации кастомных элементов необходимо использовать паттерн ограничения интерфейса.**
+
+Использование селениумовского `WebElement` позволяет одинаково работать со всеми элементами на странице,
+предоставляя единообразный интерфейс.
+Это не всегда хорошо, потому что некоторые элементы могут отличаться по своей семантике и не поддерживать то или иное
+действие.
+
+Пусть у вас на странице есть кнопка. Кнопку можно кликнуть, но нельзя вписать внутрь текст, как в текстовый input.
+Наличие типизированных элементов JDI Light позволяет явным образом разграничить функционал.
+
 Для реализации кастомных элементов скорее всего будет достаточно расширить классы
-`UIBaseElement` или `UIListBase`.
+`UIBaseElement` или `UIListBase`, которые содержат в себе экземпляр, 
+вернее `ThreadLocal` подобную обертку над `UIElement`.
 
 ![UIBase](images/uibase.png)
 
-Эти классы содержат в себе экземпляр, вернее `ThreadLocal` подобную обертку над `UIElement`, рассмотренным выше.
+Таким образом, по умолчанию элемент будет ограничен стандартным набором методов, применимых ко всем элементам.
+
+#### Интерфейс ICoreElement
+Позволяет добавить к кастомному элементу общие для всех элементов методы:
+```java
+public interface ICoreElement extends IBaseElement {
+    UIElement core();
+    default UIElement iCore() { return core(); }
+    ...
+    default void hover() { iCore().hover(); }
+    default boolean isEnabled() { return iCore().isEnabled(); }
+    default boolean isDisplayed() { return iCore().isDisplayed(); }
+    default boolean isVisible() { return iCore().isVisible(); }
+    default boolean isExist() { return iCore().isExist(); }
+    ...
+    default String attr(String name) { return iCore().attr(name); }
+    default MapArray<String, String> attrs() { return iCore().attrs(); }
+    default String css(String prop) { return iCore().css(prop); }
+    default boolean hasClass(String className) { return iCore().hasClass(className); }
+    default boolean hasAttribute(String attrName) { return iCore().hasAttribute(attrName); }
+    default String printHtml() { return iCore().printHtml(); }
+    default List<String> classes() { return iCore().classes(); }
+    default UIElement find(@MarkupLocator String by) { return iCore().find(by); }
+    ...
+```
+
+А также добавляет методы `IBaseElement`, рассмотренного выше.
+
+#### Расширение функционала элемента
 
 В `UIBaseElement` переопределен метод `core()`, возвращающий `UIElement` из этой обертки. Благодаря этому встроенные
-интерфейсы с `default` методами могут обращаться к экземпляру. Это удобно тем, что можно при определении класса добавить
-интерфейс, например, `IsInput` и его функционал станет доступным без необходимости писать дополнительный код.
+интерфейсы с `default` методами могут обращаться к экземпляру и использовать реализацию из `UIElement`.
+Таким образом, если вашему элементу надо добавить существующий в `UIElement` функционал, то достаточно будет добавить
+интерфейс в объявление вашего класса, ничего больше делать не нужно.
 
-### Частые ошибки
+Рассмотрим пример.
+Пусть необходимо реализовать input, хотим, чтобы у пользователя была возможность передать в него данные, которые попадут
+в input на странице.
+У `UIElement` есть метод, позволяющий выполнить эту задачу, но отправка текста -- действие специфическое, не во все элементы 
+можно послать текст, поэтому необходимо добавить соответствующий интерфейс.
+
+```java
+public class Input extends UIBaseElement<?> implements IsInput {
+  ...
+}
+...
+static Input inputObj;
+inputObj.sendKeys("abacaba");
+        ^
+        |
+  Получили из IsInput c default реализацией
+```
+
+Дефолтная реализация делает следующее:
+```java
+public interface IsInput extends IsText, HasPlaceholder {
+    default void sendKeys(CharSequence... value) { core().sendKeys(value); }
+```
+
+Вызов `core()` возвращает `UIElement`, который вызывает `WebElement.sendKeys()`.
+
+Список стандартных интерфейсов представлен в пакете `com.epam.jdi.light.elements.interfaces`.
+
+#### Класс UIListBase\<A>
 
 TODO
 
+### Дженерики стандартных элементов
+
+Стандартные классы `UIBaseElement`, `UIListBase`, `UIAssert` и другие используют дженерик параметры 
+для понижающего приведения.
+
+#### Понижающее приведение
+
+Пусть у нас есть класс `Animal` и класс `Cat extends Animal`, тогда пример понижающего приведения представлен ниже.
+```java
+Animal cat = new Cat();
+Cat theRealCat = (Cat) cat;
+```
+
+Если бы `cat` был создан с `new Animal()`, то мы бы получили в последствии `ClassCastException`.
+
+Хотя понижающее приведение и считается критиками признаком плохого дизайна, нарушением LSP и другими
+смертными грехами, эта практика позволяет писать достаточно обобщенный код и использовать его в иерархии наследования.
+
+#### Как это работает в JDI Light
+
+С одной стороны у нас есть элемент, реализующий `HasAssert<A>`.
+Здесь `A` -- тип Assertion object'а, такими образом запись
+```java
+public class Avatar extends UIBaseElement<AvatarAssert> {
+...
+```
+говорит о том, что Assertion object будет иметь тип `AvatarAssert`, обобщенный код попытается сделать понижающее
+приведение именно к этому типу.
+
+**Важно** переопределить метод **is()** иначе будет создан `UIAssert` и при попытке каста к указанному типу
+вы получите `ClassCastException`.
+```java
+  public AvatarAssert is() {
+        return new AvatarAssert().set(this);
+  }
+```
+
+С другой стороны, есть Assertion object'ы, которые должны знать про 2 типа: свой тип для chain-вызовов вроде
+`elem.is().smth().and().smwht();` и тип элемента, над которым происходит проверка, чтобы иметь возможность
+вызывать его методы.
+
+```java
+public class AvatarAssert extends UIAssert<AvatarAssert, Avatar> {
+```
+
+Без понижающего приведения мы бы не могли использовать методы классов потомков `ICoreElement` и `UIAssert`.
+
+Схематически это можно описать так (`ET` -- element type, `AT` -- assertion obj type):
+```java
+class ET extends UIBaseElement<AT> {...}
+class AT extends UIAssert<AT, ET>
+element.is() ~> (AT) assertionObj;
+assertionObj.element() ~> (ET) element;
+assertionObj.[any]() ~> (AT) assertionObj;
+```
+
+Притом, что в реализации классов родителей и `element`, и `assertionObj` могут иметь другие типы, благодаря понижающему
+приведению мы можем использовать методы наших классов, а логику взаимодействия и реализации по умолчанию 
+родительских.
+
 ### Написание complex элемента со своими аннотациями
+
+При разработке *complex* элемента, состоящего из нескольких частей, может потребоваться знать больше,
+чем 1 локатор.
+В этом случае необходимо дать возможность конечному пользователю указать дополнительные локаторы, например,
+с помощью кастомной аннотации.
+При этом важно реализовать интерфейс `ISetup`, чтобы получить указанные локаторы внутри вашего класса.
+
+Аннотация:
+```java
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD})
+public @interface JDISomething {
+    @MarkupLocator String root() default "";
+    @MarkupLocator String inner() default "";
+    @MarkupLocator String expand() default "";
+    ...
+}
+```
+
+Класс:
+```java
+public class CoolComplexElement extends UIBaseElement<?> implements ISetup {
+  protected String ROOT_LOCATOR = ".v-root";
+  protected String INNER_LOCATOR = ".v-inner__something-else";
+  ...
+  
+  @Override
+    public void setup(Field field) {
+        super.setup(field);
+        if (!fieldHasAnnotation(field, JDIButtonGroup.class, CoolComplexElement.class))
+            return;
+        JDISomething annotation = field.getAnnotation(JDISomething.class);
+
+        if (!annotation.root().isEmpty()) {
+            ...
+        }
+        if (!annotation.inner().isEmpty()) {
+            INNER_LOCATOR = annotation.inner();
+        }
+        ...
+    }
+
+}
+```
+
+### Частые ошибки
 
 TODO
 
@@ -337,8 +522,7 @@ TODO
 В основе АОП лежит паттерн проектирования [**прокси**](https://refactoring.guru/design-patterns/proxy). Существует
 несколько способов реализации проксирования объектов и инструментов, позволяющих это сделать, остановимся на *AspectJ*.
 Этот инструмент позволяет использовать несколько вариантов проксирования объектов: времени компиляции, времени
-исполнения. Привожу выдержку [**из
-книги**](https://livebook.manning.com/book/aspectj-in-action-second-edition/chapter-8/3) по *AspectJ*:
+исполнения. Привожу выдержку [**из книги**](https://livebook.manning.com/book/aspectj-in-action-second-edition/chapter-8/3) по *AspectJ*:
 > The most basic form of weaving is build-time source-code weaving, where the AspectJ compiler compiles source files to produce a woven system. Although this form offers the best experience by providing immediate feedback for source-code errors and by eliminating deployment modifications, using a new compiler can impede AOP adoption. One alternative is build-time byte-code weaving, which lets you delay the introduction of the special compiler until after you compile the code. It also offers a way to weave even when you don’t have access to the source code for classes or aspects. Load-time weaving goes further by eliminating the weaving step from the build process. Instead, it weaves classes as they’re loaded into the VM. Load-time weaving is often the first choice for AspectJ-based tools that want to add new functionality in a minimally invasive fashion. All these choices make adoption of AspectJ easier than ever before.
 
 JDI Light использует компилятор *ajc*, позволяющий встраивать код аспектов в методы элементов (проксировать эти вызовы).
@@ -492,6 +676,8 @@ throw exception(exception, getFailedMessage(jInfo, exceptionMsg));
 Изучение классов и их методов в пакете `com.epam.jdi.light.actions` даст вам более четкое понимание работы JDI Light.
 
 ## Обзор JDI Lightsaber
+
+### Функциональные интерфейсы
 
 TODO
 
