@@ -307,6 +307,11 @@ public interface HasAssert<A> {
 Для реализации кастомных элементов скорее всего будет достаточно расширить классы
 `UIBaseElement` или `UIListBase`, которые содержат в себе экземпляр, 
 вернее `ThreadLocal` подобную обертку над `UIElement`.
+Использование `UIElement` не напрямую, а через `ThreadLocal` переменную позволяет описать *pageobject* со статик элементом
+внутри и не переживать за запуск теста в многопоточной среде.
+Даже если тестовый класс будет распараллелен по методам и несколько браузеров будут работать на одной странице с одним
+и тем же элементом, в конечном итоге вся логика взаимодействия между вашим кодом и браузером будет проходить через
+`UIElement`, который у каждого потока (читай драйвера) будет свой.
 
 ![UIBase](images/uibase.png)
 
@@ -750,7 +755,59 @@ throw exception(exception, getFailedMessage(jInfo, exceptionMsg));
 
 ### Функциональные интерфейсы
 
+Функциональные интерфейсы расположены в пакете `com.jdiai.tools.func`.
+Существует 2 типа интерфейсов `JAction` и `JFunc`, принимающих от нуля до 9 аргументов.
+При этом метод `JFunc` возвращает значение, а `JAction` -- нет.
+
+Эти интерфейсы используются для решения проблемы с наличием проверяемых исключений в сигнатуре метода, к которому
+мы хотим сделать референс.
+```java
+R foo();
+```
+и
+```java
+R foo() throws E;
+```
+не взаимозаменяемы.
+
+Подробнее можно прочитать 
+[**в вопросе**](https://stackoverflow.com/questions/18198176/java-8-lambda-function-that-throws-exception) на StackOverflow.
+
+
+### Класс Timer
+
+Позволяет установить ожидание некоторого условия
+по времени или предикату.
+Можно использовать с лямбдой-supplier'ом для
+получения результата по времени или по условию (`Timer.getByCondition`).
+
+Условие ожидания должно либо бросать исключение,
+либо возвращать `boolean`.
+
+Внутри обычный цикл, `retryTimeoutInMSec` можно задать извне.
+```java
+  public boolean wait(Supplier<Boolean> waitCase) {
+    Throwable exception = null;
+    while (isRunning())
+      try {
+        if (waitCase != null && waitCase.get()) {
+          return true;
+        }
+        sleep(retryTimeoutInMSec);
+      } catch (Exception | Error ex) { exception = ex; }
+    if (exception != null) {
+      throwException(exception);
+    }
+    return false;
+  }
+```
+
+Из пользовательского кода удобно использовать с помощью
+статик методов, например, `Timer.waitCondition`.
+
+
 TODO
+
 
 ## Работа с драйвером
 
