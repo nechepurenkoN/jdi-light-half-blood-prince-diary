@@ -32,7 +32,7 @@ TODO
 `".//*/text()[contains(normalize-space(.), %s)]/parent::*"`. Возможно, это повысит читаемость вашего кода.
 
 Пожалуйста, изучите список существующих аннотацией
-[по ссылке](https://jdi-docs.github.io/jdi-light/#custom-smart-annotation).
+[по ссылке](https://jdi-docs.github.io/jdi-light/#custom-smart-annotations).
 
 ### Возможности аннотации UI
 
@@ -46,7 +46,7 @@ TODO
 *JDI locator*: `div.btn['Submit']`
 
 Больше интересных примеров использования 
-[**здесь**](https://jdi-docs.github.io/jdi-light/#jdi-locators-simple-as-css-powerful-as-xpath). 
+[**здесь**](https://jdi-docs.github.io/jdi-light/#jdi-locators-as-simple-as-css-as-powerful-as-xpath). 
 Пожалуйста, изучите этот абзац, возможно, это сэкономит вам время.
 
 # Поддержка фрэймворков
